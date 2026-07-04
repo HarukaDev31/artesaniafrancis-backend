@@ -38,7 +38,8 @@ RUN composer dump-autoload --optimize \
 
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/99-artesania.ini
 COPY docker/php/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh \
+    && chmod +x /entrypoint.sh
 
 EXPOSE 9000
 
