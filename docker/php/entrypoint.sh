@@ -3,16 +3,27 @@ set -e
 
 cd /var/www/html
 
+dedupe_app_key() {
+  _file="$1"
+  [ -f "$_file" ] || return 0
+  _line=$(grep -m1 '^APP_KEY=base64:' "$_file" 2>/dev/null || true)
+  sed -i '/^APP_KEY=/d' "$_file"
+  if [ -n "$_line" ]; then
+    echo "$_line" >> "$_file"
+  fi
+}
+
 # El volumen monta el .env del host (sqlite/local). En Docker usamos .env.docker.
 if [ -f .env.docker ]; then
+  dedupe_app_key .env.docker
+  sed -i '/^APP_KEY=$/d' .env.docker 2>/dev/null || true
   cp .env.docker .env
 elif [ ! -f .env ]; then
   echo "ERROR: crea .env.docker (cp .env.docker.example .env.docker)" >&2
   exit 1
 fi
 
-# Quitar APP_KEY= vacío que Docker inyecta vía env_file y anula el .env
-sed -i '/^APP_KEY=$/d' .env.docker 2>/dev/null || true
+dedupe_app_key .env
 sed -i '/^APP_KEY=$/d' .env 2>/dev/null || true
 
 if [ ! -f vendor/autoload.php ]; then
@@ -29,23 +40,21 @@ artisan() {
 }
 
 app_key_from_env() {
-  grep '^APP_KEY=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r'
+  grep -m1 '^APP_KEY=base64:' .env 2>/dev/null | cut -d= -f2- | tr -d '\r'
 }
 
 APP_KEY_VALUE=$(app_key_from_env)
-if [ -z "$APP_KEY_VALUE" ] || [ "$APP_KEY_VALUE" = "base64:" ]; then
+if [ -z "$APP_KEY_VALUE" ]; then
   echo "Generando APP_KEY..."
   artisan key:generate --force
+  dedupe_app_key .env
   APP_KEY_VALUE=$(app_key_from_env)
 fi
 
-# Persistir en .env.docker para que sobreviva reinicios
+# Una sola APP_KEY en .env.docker
 if [ -f .env.docker ] && [ -n "$APP_KEY_VALUE" ]; then
-  if grep -q '^APP_KEY=' .env.docker; then
-    sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY_VALUE}|" .env.docker
-  else
-    echo "APP_KEY=${APP_KEY_VALUE}" >> .env.docker
-  fi
+  sed -i '/^APP_KEY=/d' .env.docker
+  echo "APP_KEY=${APP_KEY_VALUE}" >> .env.docker
   cp .env.docker .env
 fi
 
