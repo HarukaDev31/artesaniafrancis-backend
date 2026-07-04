@@ -67,13 +67,11 @@ done
 
 artisan migrate --force --no-interaction || echo "WARN: migrate falló" >&2
 
-artisan optimize:clear 2>/dev/null || true
-artisan config:cache || echo "WARN: config:cache falló" >&2
-
-if ! grep -q 'base64:' bootstrap/cache/config.php 2>/dev/null; then
-  rm -f bootstrap/cache/config.php
-  artisan config:cache
-fi
+# Sin config:cache — en Docker se corrompe la APP_KEY. Laravel lee .env directo.
+rm -f bootstrap/cache/config.php bootstrap/cache/routes-v7.php
+artisan config:clear 2>/dev/null || true
+artisan route:clear 2>/dev/null || true
+artisan view:clear 2>/dev/null || true
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
