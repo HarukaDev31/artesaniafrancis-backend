@@ -1,16 +1,18 @@
 FROM php:8.2-fpm-bookworm
 
-# Debian: extensiones PHP sin pecl (Redis vía predis en Composer)
+# Dependencias para extensiones PHP en Debian Bookworm
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
         git \
         unzip \
+        pkg-config \
         libfreetype6-dev \
         libjpeg62-turbo-dev \
         libpng-dev \
         libzip-dev \
         libicu-dev \
+        libonig-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j2 \
         gd \
