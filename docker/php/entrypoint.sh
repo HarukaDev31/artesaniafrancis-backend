@@ -48,7 +48,7 @@ rm -f bootstrap/cache/config.php bootstrap/cache/routes-v7.php
 artisan config:clear 2>/dev/null || true
 
 if ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
-  echo "WARN: Genera APP_KEY: docker compose exec app php artisan key:generate --force" >&2
+  echo "WARN: Ejecuta en el host: sh docker/fix-app-key.sh" >&2
 fi
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true

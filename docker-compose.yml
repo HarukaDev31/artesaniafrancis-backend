@@ -69,6 +69,9 @@ services:
     env_file:
       - .env.docker
     environment:
+      # APP_KEY solo en .env (nunca en .env.docker). Compose la inyecta aquí y
+      # sobrescribe cualquier APP_KEY vacía que env_file pudiera cargar.
+      APP_KEY: ${APP_KEY}
       # Siempre alineado con el servicio mysql (evita desajustes con el volumen)
       DB_CONNECTION: mysql
       DB_HOST: mysql
