@@ -19,12 +19,31 @@ fi
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
-if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "base64:" ]; then
+# Docker env_file puede inyectar APP_KEY= vacío y anular el valor del .env.
+unset APP_KEY
+
+app_key_from_env() {
+  grep '^APP_KEY=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r'
+}
+
+APP_KEY_VALUE=$(app_key_from_env)
+if [ -z "$APP_KEY_VALUE" ] || [ "$APP_KEY_VALUE" = "base64:" ]; then
   echo "Generando APP_KEY..."
   php artisan key:generate --force
+  APP_KEY_VALUE=$(app_key_from_env)
 fi
 
-# MySQL ya está healthy por depends_on; reintentos cortos con diagnóstico.
+# Persistir en .env.docker para que sobreviva reinicios
+if [ -f .env.docker ] && [ -n "$APP_KEY_VALUE" ]; then
+  if grep -q '^APP_KEY=' .env.docker; then
+    sed -i "s|^APP_KEY=.*|APP_KEY=${APP_KEY_VALUE}|" .env.docker
+  else
+    echo "APP_KEY=${APP_KEY_VALUE}" >> .env.docker
+  fi
+fi
+
+export APP_KEY="$APP_KEY_VALUE"
+
 echo "Verificando MySQL..."
 i=0
 while [ "$i" -lt 10 ]; do
