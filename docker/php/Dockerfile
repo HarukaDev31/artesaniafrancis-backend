@@ -1,16 +1,21 @@
 FROM php:8.2-fpm-alpine
 
+# Dependencias runtime + build (PHPIZE_DEPS necesario para pecl redis)
 RUN apk add --no-cache \
-    bash \
-    curl \
-    freetype-dev \
-    git \
-    icu-dev \
-    libjpeg-turbo-dev \
-    libpng-dev \
-    libzip-dev \
-    oniguruma-dev \
-    unzip \
+        bash \
+        curl \
+        freetype-dev \
+        git \
+        icu-dev \
+        icu-libs \
+        libjpeg-turbo-dev \
+        libpng-dev \
+        libzip-dev \
+        oniguruma-dev \
+        unzip \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        linux-headers \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         gd \
@@ -21,7 +26,8 @@ RUN apk add --no-cache \
         zip \
     && pecl install redis \
     && docker-php-ext-enable redis \
-    && rm -rf /tmp/pear
+    && apk del .build-deps \
+    && rm -rf /tmp/pear /tmp/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
