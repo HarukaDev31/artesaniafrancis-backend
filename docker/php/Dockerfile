@@ -1,33 +1,26 @@
-FROM php:8.2-fpm-alpine
+FROM php:8.2-fpm-bookworm
 
-# Dependencias runtime + build (PHPIZE_DEPS necesario para pecl redis)
-RUN apk add --no-cache \
-        bash \
+# Debian: extensiones PHP sin pecl (Redis vía predis en Composer)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         curl \
-        freetype-dev \
         git \
-        icu-dev \
-        icu-libs \
-        libjpeg-turbo-dev \
+        unzip \
+        libfreetype6-dev \
+        libjpeg62-turbo-dev \
         libpng-dev \
         libzip-dev \
-        oniguruma-dev \
-        unzip \
-    && apk add --no-cache --virtual .build-deps \
-        $PHPIZE_DEPS \
-        linux-headers \
+        libicu-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
+    && docker-php-ext-install -j2 \
         gd \
         intl \
         mbstring \
         opcache \
         pdo_mysql \
         zip \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
-    && apk del .build-deps \
-    && rm -rf /tmp/pear /tmp/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
