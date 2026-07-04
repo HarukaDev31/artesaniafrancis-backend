@@ -1,0 +1,85 @@
+# Backend — frontend en Netlify
+# cp .env.docker.example .env.docker && docker compose up -d --build
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: artesania-mysql
+    restart: unless-stopped
+    ports:
+      - "3310:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-secret_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-artesania_francis}
+      MYSQL_USER: ${MYSQL_USER:-artesania}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-secret}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - artesania
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-secret_root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: artesania-redis
+    restart: unless-stopped
+    ports:
+      - "6090:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - artesania
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: artesania-app
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    volumes:
+      - .:/var/www/html
+      - app_storage:/var/www/html/storage/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - artesania
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: artesania-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8090:8090"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./public:/var/www/html/public:ro
+    depends_on:
+      - app
+    networks:
+      - artesania
+
+volumes:
+  mysql_data:
+  redis_data:
+  app_storage:
+
+networks:
+  artesania:
+    driver: bridge
