@@ -11,6 +11,10 @@ elif [ ! -f .env ]; then
   exit 1
 fi
 
+# Quitar APP_KEY= vacío que Docker inyecta vía env_file y anula el .env
+sed -i '/^APP_KEY=$/d' .env.docker 2>/dev/null || true
+sed -i '/^APP_KEY=$/d' .env 2>/dev/null || true
+
 if [ ! -f vendor/autoload.php ]; then
   echo "Instalando dependencias Composer..."
   composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
@@ -19,8 +23,10 @@ fi
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
-# Docker env_file puede inyectar APP_KEY= vacío y anular el valor del .env.
-unset APP_KEY
+# Artisan debe leer APP_KEY del .env, no del entorno Docker (evita APP_KEY= vacío)
+artisan() {
+  env -u APP_KEY php artisan "$@"
+}
 
 app_key_from_env() {
   grep '^APP_KEY=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r'
@@ -29,7 +35,7 @@ app_key_from_env() {
 APP_KEY_VALUE=$(app_key_from_env)
 if [ -z "$APP_KEY_VALUE" ] || [ "$APP_KEY_VALUE" = "base64:" ]; then
   echo "Generando APP_KEY..."
-  php artisan key:generate --force
+  artisan key:generate --force
   APP_KEY_VALUE=$(app_key_from_env)
 fi
 
@@ -40,35 +46,36 @@ if [ -f .env.docker ] && [ -n "$APP_KEY_VALUE" ]; then
   else
     echo "APP_KEY=${APP_KEY_VALUE}" >> .env.docker
   fi
+  cp .env.docker .env
 fi
-
-export APP_KEY="$APP_KEY_VALUE"
 
 echo "Verificando MySQL..."
 i=0
 while [ "$i" -lt 10 ]; do
-  if php docker/php/wait-db.php 2>/dev/null | grep -q OK; then
+  if env -u APP_KEY php docker/php/wait-db.php 2>/dev/null | grep -q OK; then
     echo "MySQL conectado."
     break
   fi
   i=$((i + 1))
   echo "  intento $i/10:"
-  php docker/php/wait-db.php 2>&1 || true
+  env -u APP_KEY php docker/php/wait-db.php 2>&1 || true
   sleep 2
 done
 
 if [ "$i" -ge 10 ]; then
   echo "WARN: no se pudo conectar a MySQL." >&2
-  echo "  → DB_PASSWORD en .env.docker debe coincidir con MYSQL_PASSWORD" >&2
-  echo "  → Si cambiaste la contraseña, borra el volumen: docker compose down -v" >&2
 fi
 
-php artisan migrate --force --no-interaction || echo "WARN: migrate falló — revisa logs" >&2
+artisan migrate --force --no-interaction || echo "WARN: migrate falló — revisa logs" >&2
 
-php artisan config:clear 2>/dev/null || true
-php artisan config:cache || echo "WARN: config:cache falló" >&2
-php artisan route:cache || echo "WARN: route:cache falló" >&2
-php artisan view:cache || echo "WARN: view:cache falló" >&2
+artisan optimize:clear 2>/dev/null || true
+artisan config:cache || echo "WARN: config:cache falló" >&2
+
+if ! grep -q 'base64:' bootstrap/cache/config.php 2>/dev/null; then
+  echo "ERROR: config cache sin APP_KEY, reintentando..." >&2
+  rm -f bootstrap/cache/config.php
+  artisan config:cache
+fi
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
