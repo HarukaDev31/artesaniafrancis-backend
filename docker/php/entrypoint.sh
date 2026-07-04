@@ -46,6 +46,7 @@ app_key_from_env() {
 APP_KEY_VALUE=$(app_key_from_env)
 if [ -z "$APP_KEY_VALUE" ]; then
   echo "Generando APP_KEY..."
+  grep -q '^APP_KEY=' .env || echo 'APP_KEY=' >> .env
   artisan key:generate --force
   dedupe_app_key .env
   APP_KEY_VALUE=$(app_key_from_env)

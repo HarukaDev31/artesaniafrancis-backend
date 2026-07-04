@@ -9,6 +9,7 @@ echo "==> Limpiando APP_KEY duplicadas..."
 sed -i '/^APP_KEY=/d' .env.docker .env 2>/dev/null || true
 
 echo "==> Generando una sola APP_KEY..."
+grep -q '^APP_KEY=' .env || echo 'APP_KEY=' >> .env
 docker compose exec -T app env -u APP_KEY php artisan key:generate --force
 
 KEY_LINE=$(grep -m1 '^APP_KEY=' .env | tr -d '\r')
