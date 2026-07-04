@@ -5,6 +5,9 @@ cd /var/www/html
 
 # APP_KEY solo en .env (generarla manualmente una vez). Nunca en .env.docker.
 sed -i '/^APP_KEY=/d' .env.docker 2>/dev/null || true
+# Redis Docker sin contraseña — borrar solo el valor literal "null"
+sed -i '/^REDIS_PASSWORD=null$/d' .env.docker 2>/dev/null || true
+sed -i '/^REDIS_PASSWORD=null$/d' .env 2>/dev/null || true
 
 if [ ! -f .env ]; then
   if [ -f .env.docker ]; then

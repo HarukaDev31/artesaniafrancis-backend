@@ -32,13 +32,30 @@ services:
     restart: unless-stopped
     ports:
       - "6090:6379"
-    command: redis-server --appendonly yes
+    env_file:
+      - .env.docker
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+        else
+          exec redis-server --appendonly yes
+        fi
     volumes:
       - redis_data:/data
     networks:
       - artesania
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD-SHELL
+        - |
+          if [ -n "$$REDIS_PASSWORD" ]; then
+            redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG
+          else
+            redis-cli ping | grep -q PONG
+          fi
       interval: 10s
       timeout: 3s
       retries: 5
