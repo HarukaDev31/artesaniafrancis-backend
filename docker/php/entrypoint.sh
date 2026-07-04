@@ -3,31 +3,18 @@ set -e
 
 cd /var/www/html
 
-dedupe_app_key() {
-  _file="$1"
-  [ -f "$_file" ] || return 0
-  _line=$(grep -m1 '^APP_KEY=base64:' "$_file" 2>/dev/null || true)
-  sed -i '/^APP_KEY=/d' "$_file"
-  if [ -n "$_line" ]; then
-    echo "$_line" >> "$_file"
-  fi
-}
+# APP_KEY solo en .env (generarla manualmente una vez). Nunca en .env.docker.
+sed -i '/^APP_KEY=/d' .env.docker 2>/dev/null || true
 
-# APP_KEY NUNCA va en .env.docker — Docker la inyecta y anula el .env
-if [ -f .env.docker ]; then
-  sed -i '/^APP_KEY=/d' .env.docker
-  _saved_key=$(grep -m1 '^APP_KEY=base64:' .env 2>/dev/null || true)
-  cp .env.docker .env
-  if [ -n "$_saved_key" ]; then
-    sed -i '/^APP_KEY=/d' .env
-    echo "$_saved_key" >> .env
+if [ ! -f .env ]; then
+  if [ -f .env.docker ]; then
+    cp .env.docker .env
+    echo 'APP_KEY=' >> .env
+  else
+    echo "ERROR: cp .env.docker.example .env.docker" >&2
+    exit 1
   fi
-elif [ ! -f .env ]; then
-  echo "ERROR: crea .env.docker (cp .env.docker.example .env.docker)" >&2
-  exit 1
 fi
-
-dedupe_app_key .env
 
 if [ ! -f vendor/autoload.php ]; then
   echo "Instalando dependencias Composer..."
@@ -40,19 +27,6 @@ chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 artisan() {
   env -u APP_KEY php artisan "$@"
 }
-
-app_key_from_env() {
-  grep -m1 '^APP_KEY=base64:' .env 2>/dev/null | cut -d= -f2- | tr -d '\r'
-}
-
-APP_KEY_VALUE=$(app_key_from_env)
-if [ -z "$APP_KEY_VALUE" ]; then
-  echo "Generando APP_KEY..."
-  echo 'APP_KEY=' >> .env
-  artisan key:generate --force
-  dedupe_app_key .env
-  APP_KEY_VALUE=$(app_key_from_env)
-fi
 
 echo "Verificando MySQL..."
 i=0
@@ -67,11 +41,12 @@ done
 
 artisan migrate --force --no-interaction || echo "WARN: migrate falló" >&2
 
-# Sin config:cache — en Docker se corrompe la APP_KEY. Laravel lee .env directo.
 rm -f bootstrap/cache/config.php bootstrap/cache/routes-v7.php
 artisan config:clear 2>/dev/null || true
-artisan route:clear 2>/dev/null || true
-artisan view:clear 2>/dev/null || true
+
+if ! grep -q '^APP_KEY=base64:' .env 2>/dev/null; then
+  echo "WARN: Genera APP_KEY: docker compose exec app php artisan key:generate --force" >&2
+fi
 
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 

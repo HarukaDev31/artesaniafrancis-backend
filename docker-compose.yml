@@ -1,5 +1,6 @@
 # Backend — frontend en Netlify
 # cp .env.docker.example .env.docker && docker compose up -d --build
+# Primera vez: sh docker/fix-app-key.sh
 # HTTPS: ver docker/nginx/host/api.artesaniafrancis.com.conf (nginx del servidor, no Docker)
 
 services:
