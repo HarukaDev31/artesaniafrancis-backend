@@ -19,34 +19,29 @@ fi
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
-echo "Esperando MySQL..."
+if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "base64:" ]; then
+  echo "Generando APP_KEY..."
+  php artisan key:generate --force
+fi
+
+# MySQL ya está healthy por depends_on; reintentos cortos con diagnóstico.
+echo "Verificando MySQL..."
 i=0
-while [ "$i" -lt 30 ]; do
-  if php -r "
-    \$h = getenv('DB_HOST') ?: 'mysql';
-    \$p = getenv('DB_PORT') ?: '3306';
-    \$d = getenv('DB_DATABASE') ?: 'artesania_francis';
-    \$u = getenv('DB_USERNAME') ?: 'artesania';
-    \$pw = getenv('DB_PASSWORD') ?: 'secret';
-    try {
-      new PDO(\"mysql:host=\$h;port=\$p;dbname=\$d\", \$u, \$pw);
-      exit(0);
-    } catch (Throwable \$e) {
-      exit(1);
-    }
-  "; then
+while [ "$i" -lt 10 ]; do
+  if php docker/php/wait-db.php 2>/dev/null | grep -q OK; then
+    echo "MySQL conectado."
     break
   fi
   i=$((i + 1))
+  echo "  intento $i/10:"
+  php docker/php/wait-db.php 2>&1 || true
   sleep 2
 done
 
-if [ "$i" -ge 30 ]; then
-  echo "WARN: MySQL no respondió a tiempo; continuando de todos modos..." >&2
-fi
-
-if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "base64:" ]; then
-  php artisan key:generate --force
+if [ "$i" -ge 10 ]; then
+  echo "WARN: no se pudo conectar a MySQL." >&2
+  echo "  → DB_PASSWORD en .env.docker debe coincidir con MYSQL_PASSWORD" >&2
+  echo "  → Si cambiaste la contraseña, borra el volumen: docker compose down -v" >&2
 fi
 
 php artisan migrate --force --no-interaction || echo "WARN: migrate falló — revisa logs" >&2
